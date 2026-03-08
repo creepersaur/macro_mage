@@ -1,4 +1,5 @@
 use crate::{errors::MacroError, lexer::Token, value::Value};
+use colored::*;
 use rustautogui::RustAutoGui;
 use std::{collections::HashMap, thread, time::Duration};
 
@@ -387,6 +388,45 @@ impl MacroHandler {
                 .rag
                 .key_up(&button)
                 .map_err(|source| MacroError::AutoGuiError { source });
+        }
+
+        if command.eq_ignore_ascii_case("find") {
+            Self::minimum_argument_count(command.clone(), &args, 3, "3")?;
+
+            let file_path = &self.parse_string(&args[0])?;
+
+            let precision = self.parse_float(&args[1])?;
+
+            let x_var = if let Token::Variable(var) = &args[2] {
+                var
+            } else {
+                return Err(MacroError::ExpectedToken("variable"));
+            };
+
+            let y_var = if let Token::Variable(var) = &args[3] {
+                var
+            } else {
+                return Err(MacroError::ExpectedToken("variable"));
+            };
+
+            println!("{}", format!("Trying to find `{file_path}` (precision: {precision}).\n\tGoing to assign to: ({x_var}, {y_var})").black());
+
+            if let Err(err) = self.rag.prepare_template_from_file(
+                file_path,                         // template_path: &str path to the image file on disk
+                None, // region: Option<(u32, u32, u32, u32)>  region of monitor to search (x, y, width, height)
+                rustautogui::MatchMode::Segmented, // match_mode: rustautogui::MatchMode search mode (Segmented or FFT)
+            ) {
+                println!("Error: {}", format!("{}", err).red());
+            }
+
+            if let Ok(Some(locations)) = self.rag.find_image_on_screen(precision) {
+                self.variables
+                    .insert(x_var.clone(), Value::Int(locations[0].0 as i32));
+                self.variables
+                    .insert(y_var.clone(), Value::Int(locations[0].1 as i32));
+            }
+
+            return Ok(());
         }
 
         Err(MacroError::InvalidCommand(command))

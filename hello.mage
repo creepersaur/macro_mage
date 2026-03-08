@@ -1,14 +1,6 @@
-loop
-    mousedown
+find "honey_token.png", 0.5, $x, $y
 
-    loop 4
-        hold "d", 1.7
-        hold "s", 0.3
-        hold "a", 1.7
-        hold "s", 0.3
-	  end
+print "x:", $x
+print "y:", $y
 
-    hold "w", 2.9
-    mouseup
-end
-
+setmouse $x, $y, 1.0
