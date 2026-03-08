@@ -59,9 +59,50 @@ impl MacroHandler {
 // RUN COMMAND
 impl MacroHandler {
     pub fn run_command(&mut self, command: String, args: &[Token]) -> Result<(), MacroError> {
-        ////////////////////////////////////
+        // USER INFO
+
+        if command.eq_ignore_ascii_case("screensize") {
+            Self::minimum_argument_count(command.clone(), &args, 2, "2")?;
+
+            let (width, height) = self.rag.get_screen_size();
+
+            if let Token::Variable(var) = &args[0] {
+                self.variables.insert(var.clone(), Value::Int(width));
+            } else {
+                return Err(MacroError::ExpectedToken("variable"));
+            }
+            if let Token::Variable(var) = &args[1] {
+                self.variables.insert(var.clone(), Value::Int(height));
+            } else {
+                return Err(MacroError::ExpectedToken("variable"));
+            }
+
+            return Ok(());
+        }
+
+        if command.eq_ignore_ascii_case("mousepos") {
+            Self::minimum_argument_count(command.clone(), &args, 2, "2")?;
+
+            let (x, y) = self
+                .rag
+                .get_mouse_position()
+                .map_err(|source| MacroError::AutoGuiError { source })?;
+
+            if let Token::Variable(var) = &args[0] {
+                self.variables.insert(var.clone(), Value::Int(x));
+            } else {
+                return Err(MacroError::ExpectedToken("variable"));
+            }
+            if let Token::Variable(var) = &args[1] {
+                self.variables.insert(var.clone(), Value::Int(y));
+            } else {
+                return Err(MacroError::ExpectedToken("variable"));
+            }
+
+            return Ok(());
+        }
+
         // MOUSE
-        ////////////////////////////////////
 
         if command.eq_ignore_ascii_case("setmouse") {
             Self::minimum_argument_count(command.clone(), &args, 2, "2-3")?;
@@ -134,8 +175,6 @@ impl MacroHandler {
         }
 
         if command.eq_ignore_ascii_case("doubleclick") {
-            Self::minimum_argument_count(command.clone(), &args, 1, "1")?;
-
             return self
                 .rag
                 .double_click()
@@ -230,9 +269,25 @@ impl MacroHandler {
                 .map_err(|source| MacroError::AutoGuiError { source });
         }
 
-        ////////////////////////////////////
+        if command.eq_ignore_ascii_case("scroll") {
+            Self::minimum_argument_count(command.clone(), &args, 1, "1")?;
+
+            let intensity = self.parse_int(&args[0])?;
+
+            if intensity < 0 {
+                return self
+                    .rag
+                    .scroll_down(intensity.abs() as u32)
+                    .map_err(|source| MacroError::AutoGuiError { source });
+            } else {
+                return self
+                    .rag
+                    .scroll_up(intensity as u32)
+                    .map_err(|source| MacroError::AutoGuiError { source });
+            }
+        }
+
         // VARIABLES
-        ////////////////////////////////////
 
         if command.eq_ignore_ascii_case("set") {
             Self::minimum_argument_count(command.clone(), &args, 2, "2")?;
@@ -278,9 +333,7 @@ impl MacroHandler {
             return Ok(());
         }
 
-        ////////////////////////////////////
         // CONTROL
-        ////////////////////////////////////
 
         if command.eq_ignore_ascii_case("wait") {
             Self::minimum_argument_count(command.clone(), &args, 1, "1")?;
@@ -390,26 +443,10 @@ impl MacroHandler {
                 .map_err(|source| MacroError::AutoGuiError { source });
         }
 
-        if command.eq_ignore_ascii_case("find") {
-            Self::minimum_argument_count(command.clone(), &args, 3, "3")?;
+        if command.eq_ignore_ascii_case("load") {
+            Self::minimum_argument_count(command.clone(), &args, 1, "1")?;
 
             let file_path = &self.parse_string(&args[0])?;
-
-            let precision = self.parse_float(&args[1])?;
-
-            let x_var = if let Token::Variable(var) = &args[2] {
-                var
-            } else {
-                return Err(MacroError::ExpectedToken("variable"));
-            };
-
-            let y_var = if let Token::Variable(var) = &args[3] {
-                var
-            } else {
-                return Err(MacroError::ExpectedToken("variable"));
-            };
-
-            println!("{}", format!("Trying to find `{file_path}` (precision: {precision}).\n\tGoing to assign to: ({x_var}, {y_var})").black());
 
             if let Err(err) = self.rag.prepare_template_from_file(
                 file_path,                         // template_path: &str path to the image file on disk
@@ -419,11 +456,90 @@ impl MacroHandler {
                 println!("Error: {}", format!("{}", err).red());
             }
 
+            println!("{}", format!("Loaded image: `{file_path}`").black());
+
+            return Ok(());
+        }
+
+        if command.eq_ignore_ascii_case("find") {
+            Self::minimum_argument_count(command.clone(), &args, 3, "3")?;
+
+            let precision = self.parse_float(&args[0])?;
+
+            let x_var = if let Token::Variable(var) = &args[1] {
+                var
+            } else {
+                return Err(MacroError::ExpectedToken("variable"));
+            };
+
+            let y_var = if let Token::Variable(var) = &args[2] {
+                var
+            } else {
+                return Err(MacroError::ExpectedToken("variable"));
+            };
+
+            println!("{}", format!("Trying to find image (precision: {precision}). Going to assign to: ({x_var}, {y_var})").black());
+
             if let Ok(Some(locations)) = self.rag.find_image_on_screen(precision) {
                 self.variables
                     .insert(x_var.clone(), Value::Int(locations[0].0 as i32));
                 self.variables
                     .insert(y_var.clone(), Value::Int(locations[0].1 as i32));
+            } else {
+                self.variables.insert(x_var.clone(), Value::NIL);
+                self.variables.insert(y_var.clone(), Value::NIL);
+            }
+
+            return Ok(());
+        }
+
+        if command.eq_ignore_ascii_case("store") {
+            Self::minimum_argument_count(command.clone(), &args, 2, "2")?;
+
+            let file_path = self.parse_string(&args[0])?;
+            let alias = self.parse_string(&args[1])?;
+
+            self.rag
+                .store_template_from_file(
+                    &file_path,
+                    None,
+                    rustautogui::MatchMode::Segmented,
+                    &alias,
+                )
+                .map_err(|source| MacroError::AutoGuiError { source })?;
+
+            println!(
+                "{}",
+                format!("Stored image: `{file_path}` as `{alias}`").black()
+            );
+            return Ok(());
+        }
+
+        if command.eq_ignore_ascii_case("findstored") {
+            Self::minimum_argument_count(command.clone(), &args, 4, "4")?;
+
+            let alias = self.parse_string(&args[0])?;
+            let precision = self.parse_float(&args[1])?;
+
+            let x_var = if let Token::Variable(var) = &args[2] {
+                var
+            } else {
+                return Err(MacroError::ExpectedToken("variable"));
+            };
+            let y_var = if let Token::Variable(var) = &args[3] {
+                var
+            } else {
+                return Err(MacroError::ExpectedToken("variable"));
+            };
+
+            if let Ok(Some(locations)) = self.rag.find_stored_image_on_screen(precision, &alias) {
+                self.variables
+                    .insert(x_var.clone(), Value::Int(locations[0].0 as i32));
+                self.variables
+                    .insert(y_var.clone(), Value::Int(locations[0].1 as i32));
+            } else {
+                self.variables.insert(x_var.clone(), Value::NIL);
+                self.variables.insert(y_var.clone(), Value::NIL);
             }
 
             return Ok(());

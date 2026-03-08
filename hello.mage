@@ -1,6 +1,5 @@
-find "honey_token.png", 0.5, $x, $y
+load "honey_token.png"
+find 0.1, $image_x, $image_y
 
-print "x:", $x
-print "y:", $y
-
-setmouse $x, $y, 1.0
+// move to image on screen
+setmouse $image_x, $image_y
