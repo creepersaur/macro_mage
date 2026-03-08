@@ -1,0 +1,7 @@
+loop
+	mousedown
+
+	wait 5
+	
+	mouseup
+end

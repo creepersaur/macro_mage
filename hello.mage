@@ -1,1 +1,14 @@
-doubleclick
+loop
+    mousedown
+
+    loop 4
+        hold "d", 1.7
+        hold "s", 0.3
+        hold "a", 1.7
+        hold "s", 0.3
+	  end
+
+    hold "w", 2.9
+    mouseup
+end
+

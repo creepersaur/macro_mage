@@ -2,11 +2,14 @@ use crate::{errors::MacroError, lexer::Token, value::Value};
 use rustautogui::RustAutoGui;
 use std::{collections::HashMap, thread, time::Duration};
 
+#[allow(unused)]
 pub struct MacroHandler {
     rag: RustAutoGui,
     variables: HashMap<String, Value>,
+    // function_pointers: HashMap<String, usize>,
     loop_stack: Vec<(usize, i32)>,
-    pub line: usize,
+    function_stack: Vec<usize>,
+    pub line: i32,
 }
 
 impl MacroHandler {
@@ -15,11 +18,13 @@ impl MacroHandler {
             rag: RustAutoGui::new(false).unwrap(),
             variables: HashMap::new(),
             loop_stack: vec![],
+            // function_pointers: HashMap::new(),
+            function_stack: vec![],
             line: 0,
         }
     }
 
-    pub fn run_line(&mut self, num: usize, line: &Vec<Token>) -> Result<(), MacroError> {
+    pub fn run_line(&mut self, num: i32, line: &Vec<Token>) -> Result<(), MacroError> {
         self.line = num;
 
         let mut args = line.into_iter();
@@ -92,7 +97,12 @@ impl MacroHandler {
         }
 
         if command.eq_ignore_ascii_case("click") {
-            Self::minimum_argument_count(command.clone(), &args, 1, "1")?;
+            if args.len() == 0 {
+                return self
+                    .rag
+                    .click(rustautogui::MouseClick::LEFT)
+                    .map_err(|source| MacroError::AutoGuiError { source });
+            }
 
             let button = self.parse_string_optional(&args[0])?;
 
@@ -132,7 +142,12 @@ impl MacroHandler {
         }
 
         if command.eq_ignore_ascii_case("mousedown") {
-            Self::minimum_argument_count(command.clone(), &args, 1, "1")?;
+            if args.len() == 0 {
+                return self
+                    .rag
+                    .click_down(rustautogui::MouseClick::LEFT)
+                    .map_err(|source| MacroError::AutoGuiError { source });
+            }
 
             let button = self.parse_string(&args[0])?;
 
@@ -154,7 +169,12 @@ impl MacroHandler {
         }
 
         if command.eq_ignore_ascii_case("mouseup") {
-            Self::minimum_argument_count(command.clone(), &args, 1, "1")?;
+            if args.len() == 0 {
+                return self
+                    .rag
+                    .click_up(rustautogui::MouseClick::LEFT)
+                    .map_err(|source| MacroError::AutoGuiError { source });
+            }
 
             let button = self.parse_string(&args[0])?;
 
@@ -272,9 +292,9 @@ impl MacroHandler {
         if command.eq_ignore_ascii_case("loop") {
             if args.len() > 0 {
                 self.loop_stack
-                    .push((self.line, self.parse_uint(&args[0])? as i32));
+                    .push((self.line as usize, self.parse_uint(&args[0])? as i32));
             } else {
-                self.loop_stack.push((self.line, -1));
+                self.loop_stack.push((self.line as usize, -1));
             }
 
             return Ok(());
@@ -284,19 +304,89 @@ impl MacroHandler {
             if self.loop_stack.len() > 0 {
                 let last_idx = self.loop_stack.len() - 1;
 
-                self.line = self.loop_stack[last_idx].0;
                 if self.loop_stack[last_idx].1 < 0 {
+                    self.line = self.loop_stack[last_idx].0 as i32;
                     return Ok(());
                 }
 
                 self.loop_stack[last_idx].1 -= 1;
 
-                if self.loop_stack[last_idx].1 == 1 {
+                if self.loop_stack[last_idx].1 == 0 {
                     self.loop_stack.pop();
+                } else {
+                    self.line = self.loop_stack[last_idx].0 as i32;
                 }
             }
 
             return Ok(());
+        }
+
+        if command.eq_ignore_ascii_case("exit") {
+            self.line = -1;
+            return Ok(());
+        }
+
+        // KEYBOARD
+
+        if command.eq_ignore_ascii_case("write") {
+            Self::minimum_argument_count(command.clone(), &args, 1, "1")?;
+
+            let text = self.parse_string(&args[0])?;
+
+            return self
+                .rag
+                .keyboard_input(&text)
+                .map_err(|source| MacroError::AutoGuiError { source });
+        }
+
+        if command.eq_ignore_ascii_case("press") {
+            Self::minimum_argument_count(command.clone(), &args, 1, "1")?;
+
+            let text = self.parse_string(&args[0])?;
+
+            return self
+                .rag
+                .keyboard_command(&text)
+                .map_err(|source| MacroError::AutoGuiError { source });
+        }
+
+        if command.eq_ignore_ascii_case("hold") {
+            Self::minimum_argument_count(command.clone(), &args, 2, "2")?;
+
+            let key = self.parse_string(&args[0])?;
+
+            self.rag
+                .key_down(&key)
+                .map_err(|source| MacroError::AutoGuiError { source })?;
+
+            thread::sleep(Duration::from_secs_f32(self.parse_float(&args[1])?));
+
+            return self
+                .rag
+                .key_up(&key)
+                .map_err(|source| MacroError::AutoGuiError { source });
+        }
+
+        if command.eq_ignore_ascii_case("keydown") {
+            Self::minimum_argument_count(command.clone(), &args, 1, "1")?;
+
+            let button = self.parse_string(&args[0])?;
+
+            return self
+                .rag
+                .key_down(&button)
+                .map_err(|source| MacroError::AutoGuiError { source });
+        }
+
+        if command.eq_ignore_ascii_case("keyup") {
+            Self::minimum_argument_count(command.clone(), &args, 1, "1")?;
+
+            let button = self.parse_string(&args[0])?;
+
+            return self
+                .rag
+                .key_up(&button)
+                .map_err(|source| MacroError::AutoGuiError { source });
         }
 
         Err(MacroError::InvalidCommand(command))

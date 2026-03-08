@@ -47,6 +47,7 @@ pub fn get_line_tokens(lines: &[&str]) -> Vec<Vec<Token>> {
             let rest = split.collect::<Vec<&str>>().join(" ");
             let args = rest
                 .split(", ")
+				.filter(|x| !x.is_empty())
                 .map(|x| get_token_from_text(x.trim()))
                 .collect::<Vec<Token>>();
 

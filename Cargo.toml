@@ -1,5 +1,5 @@
 [package]
-name = "macro_mace"
+name = "macro_mage"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,3 +7,4 @@ edition = "2024"
 rustautogui = "2.5.0"
 thiserror = "*"
 colored = "*"
+rdev = "0.5"
